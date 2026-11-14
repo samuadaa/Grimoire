@@ -40,9 +40,8 @@ export const auth = betterAuth({
           if (adminEmail && newUser.email.toLowerCase() === adminEmail) {
             return { data: { ...newUser, role: "admin" } };
           }
-          if (!(await isInvited(newUser.email))) {
-            throw new APIError("FORBIDDEN", { message: "Accès sur invitation." });
-          }
+          // false = on annule la création, et Google renvoie vers /connexion
+          if (!(await isInvited(newUser.email))) return false;
           return { data: newUser };
         },
       },
@@ -56,9 +55,7 @@ export const auth = betterAuth({
           });
           if (!u) throw new APIError("FORBIDDEN", { message: "Compte introuvable." });
           if (u.role === "admin") return { data: newSession };
-          if (!(await isInvited(u.email))) {
-            throw new APIError("FORBIDDEN", { message: "Accès sur invitation." });
-          }
+          if (!(await isInvited(u.email))) return false;
           return { data: newSession };
         },
       },

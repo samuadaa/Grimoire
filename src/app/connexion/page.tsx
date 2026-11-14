@@ -1,28 +1,19 @@
-"use client";
+import GoogleButton from "@/components/GoogleButton";
 
-import { authClient } from "@/lib/auth-client";
-
-export default function Connexion() {
+export default async function Connexion({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-100 p-6">
-      <div className="w-full max-w-sm rounded-xl border border-gray-200 bg-white p-8">
-        <h1 className="text-3xl font-semibold text-slate-900">monGrimoire</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Accès sur invitation. Si votre connexion est refusée, demandez l’accès à
-          l’administrateur.
-        </p>
-        <button
-          className="mt-6 w-full rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800"
-          onClick={() =>
-            authClient.signIn.social({
-              provider: "google",
-              callbackURL: "/",
-              errorCallbackURL: "/connexion",
-            })
-          }
-        >
-          Continuer avec Google
-        </button>
+    <main className="flex min-h-screen items-center justify-center bg-[#f3f4f6] p-6">
+      <div className="w-full max-w-sm rounded-xl border border-[#dfe3ea] bg-white p-8">
+        <h1 className="text-3xl font-semibold text-[#1a2340]">monGrimoire</h1>
+        {error ? (
+          <p role="alert" className="mt-3 rounded-lg border border-[#e8b4b4] bg-[#fcebeb] px-3.5 py-2.5 text-sm text-[#791f1f]">
+            Cette adresse n’a pas encore accès. Demandez l’accès à l’administrateur, puis réessayez.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-[#3a4358]">Accès sur invitation.</p>
+        )}
+        <GoogleButton />
       </div>
     </main>
   );
