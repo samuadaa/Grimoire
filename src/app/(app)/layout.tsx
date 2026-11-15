@@ -11,20 +11,22 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-[#f3f4f6]">
-      <Sidebar tree={tree} email={user.email} />
+      <Sidebar tree={tree} email={user.email} isAdmin={user.role === "admin"} />
       <main className="min-w-0 flex-1 px-12 py-7">
-        <div className="mb-7 flex items-center gap-4">
+        <form action="/recherche" method="get" role="search" className="mb-7 flex items-center gap-4">
           <label htmlFor="recherche" className="sr-only">
-            Rechercher
+            Rechercher dans toutes vos notes
           </label>
           <input
             id="recherche"
+            name="q"
             type="search"
-            disabled
-            placeholder="La recherche arrive avec les notes…"
-            className="h-11 flex-1 rounded-lg border border-[#c9cfda] bg-white px-4 text-[15px] disabled:opacity-70"
+            required
+            maxLength={200}
+            placeholder="Rechercher dans tous vos cours…"
+            className="h-11 flex-1 rounded-lg border border-[#c9cfda] bg-white px-4 text-[15px]"
           />
-        </div>
+        </form>
         {children}
       </main>
     </div>

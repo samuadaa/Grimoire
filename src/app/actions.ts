@@ -9,6 +9,7 @@ import { isItemType } from "@/lib/items";
 import { requireUser } from "@/lib/session";
 import { emptyTrash, parentHref, purgeItem, restoreItem, trashItem } from "@/lib/trash";
 import { imageIds, parseBody } from "@/lib/richtext";
+import { buildSearchText } from "@/lib/search";
 import { cleanText, cleanUrl, isUuid } from "@/lib/validation";
 
 // En cas de saisie invalide, on revient au formulaire avec un message.
@@ -182,7 +183,15 @@ async function readNoteForm(formData: FormData, userId: string, back: string) {
     ),
   ].slice(0, 20);
 
-  return { typeId: type.id, title, body: parsed.doc, fields, tagNames, ...src };
+  return {
+    typeId: type.id,
+    title,
+    body: parsed.doc,
+    fields,
+    searchText: buildSearchText(title, fields, parsed.doc),
+    tagNames,
+    ...src,
+  };
 }
 
 async function saveTags(tx: Tx, userId: string, noteId: string, names: string[]) {
@@ -236,6 +245,7 @@ export async function createNote(formData: FormData) {
         title: f.title,
         body: f.body,
         fields: f.fields,
+        searchText: f.searchText,
         position: (last?.p ?? -1) + 1,
         sourceLabel: f.sourceLabel,
         sourceUrl: f.sourceUrl,
@@ -286,6 +296,7 @@ export async function updateNote(formData: FormData) {
         title: f.title,
         body: f.body,
         fields: f.fields,
+        searchText: f.searchText,
         sourceLabel: f.sourceLabel,
         sourceUrl: f.sourceUrl,
       })

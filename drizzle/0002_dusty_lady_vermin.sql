@@ -1,0 +1,1 @@
+ALTER TABLE "notes" ADD COLUMN "search_text" text DEFAULT '' NOT NULL;

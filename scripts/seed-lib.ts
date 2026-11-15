@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import * as schema from "../src/db/schema";
 import { DEFAULT_NOTE_TYPES } from "../src/lib/note-types";
+import { buildSearchText } from "../src/lib/search";
 import { NOTES } from "./seed-notes";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -184,6 +185,7 @@ export async function seed(db: Db, userId: string): Promise<Report> {
       title: n.title,
       body: n.body,
       fields: n.fields ?? {},
+      searchText: buildSearchText(n.title, n.fields ?? {}, n.body),
       position,
       sourceLabel: n.sourceLabel ?? null,
     });

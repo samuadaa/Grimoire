@@ -3,7 +3,7 @@ import BoutonDeconnexion from "@/components/BoutonDeconnexion";
 import NavLink from "@/components/NavLink";
 import { titleFont } from "@/components/ui";
 
-export default function Sidebar({ tree, email }: { tree: TreeDomain[]; email: string }) {
+export default function Sidebar({ tree, email, isAdmin }: { tree: TreeDomain[]; email: string; isAdmin: boolean }) {
   return (
     <aside className="sticky top-0 flex h-screen w-[300px] flex-none flex-col overflow-y-auto border-r border-[#dfe3ea] bg-white px-3.5 py-6">
       <NavLink href="/" className="mb-2 block rounded-lg px-2.5 py-1 text-[28px] font-semibold text-[#1a2340]">
@@ -36,7 +36,12 @@ export default function Sidebar({ tree, email }: { tree: TreeDomain[]; email: st
             ))}
           </div>
         ))}
-        <NavLink href="/corbeille" className="mt-7 block rounded-lg px-2.5 py-2 text-[15px] text-[#3a4358]">
+        {isAdmin && (
+          <NavLink href="/admin" className="mt-7 block rounded-lg px-2.5 py-2 text-[15px] text-[#3a4358]">
+            Administration
+          </NavLink>
+        )}
+        <NavLink href="/corbeille" className={`${isAdmin ? "mt-1" : "mt-7"} block rounded-lg px-2.5 py-2 text-[15px] text-[#3a4358]`}>
           Corbeille
         </NavLink>
       </nav>

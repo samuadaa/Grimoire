@@ -16,7 +16,7 @@ export default async function ViderLaCorbeille() {
       <div className={`${cardCls} flex flex-col gap-3 p-7`}>
         <p className="text-[16px] text-[#1a2340]">{plural(entries.length, "élément")} seront supprimés définitivement.</p>
         <p className="text-sm text-[#791f1f]">
-          Cette action est irréversible. Les images qui ne servent plus, et celles envoyées mais jamais utilisées depuis plus de 24 h, sont aussi effacées.
+          Cette action est irréversible. Les images envoyées mais jamais enregistrées dans une note, depuis plus de 24 h, sont aussi effacées.
         </p>
       </div>
       <div className="mt-5 flex gap-2.5">

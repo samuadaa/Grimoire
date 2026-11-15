@@ -157,6 +157,8 @@ export const notes = pgTable(
     position: integer("position").notNull().default(0),
     sourceLabel: text("source_label"),
     sourceUrl: text("source_url"),
+    // Texte de la note sans accents ni majuscules (titre, champs, contenu), pour la recherche.
+    searchText: text("search_text").notNull().default(""),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: deletedAt(),

@@ -15,6 +15,13 @@
       "when": 1794737020071,
       "tag": "0001_sweet_timeslip",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794782480883,
+      "tag": "0002_dusty_lady_vermin",
+      "breakpoints": true
     }
   ]
 }
