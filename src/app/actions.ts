@@ -1,10 +1,11 @@
 "use server";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { chapters, courses, domains, topics } from "@/db/schema";
+import { chapters, courses, domains, images, noteTags, noteTypes, notes, tags, topics } from "@/db/schema";
 import { requireUser } from "@/lib/session";
+import { imageIds, parseBody } from "@/lib/richtext";
 import { cleanText, cleanUrl, isUuid } from "@/lib/validation";
 
 // En cas de saisie invalide, on revient au formulaire avec un message.
@@ -124,4 +125,152 @@ export async function createTopic(formData: FormData) {
     .values({ userId: user.id, courseId: c.id, chapterId: chapter, name })
     .returning({ id: topics.id });
   redirect(`/notions/${t.id}`);
+}
+
+// ---------------------------------------------------------------- notes
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Lit et vérifie le formulaire d'une note (création ou modification).
+async function readNoteForm(formData: FormData, userId: string, back: string) {
+  const typeId = formData.get("typeId");
+  if (!isUuid(typeId)) fail(back, "Choisissez un type de note.");
+  const [type] = await db
+    .select()
+    .from(noteTypes)
+    .where(and(eq(noteTypes.id, typeId), eq(noteTypes.userId, userId)));
+  if (!type) fail(back, "Type de note introuvable.");
+
+  const hasTerm = type.fields.some((f) => f.key === "term");
+  const title = cleanText(formData.get("title"), 200) ?? "";
+  if (hasTerm && !title) fail(back, "Le terme est obligatoire.");
+
+  const parsed = parseBody(formData.get("body"));
+  if (!parsed.ok) fail(back, "Le contenu de la note est invalide ou trop long.");
+
+  const fields: Record<string, string | string[]> = {};
+  for (const f of type.fields) {
+    if (f.key === "term") continue;
+    const raw = formData.get(`f_${f.key}`);
+    if (typeof raw !== "string") continue;
+    if (f.kind === "list") {
+      const items = raw
+        .split("\n")
+        .map((l) => l.trim().slice(0, 200))
+        .filter(Boolean)
+        .slice(0, 20);
+      if (items.length) fields[f.key] = items;
+    } else if (f.kind === "code") {
+      const code = raw.slice(0, 20000);
+      if (code.trim()) fields[f.key] = code;
+    } else {
+      const v = cleanText(raw, 300);
+      if (v) fields[f.key] = v;
+    }
+  }
+
+  const src = source(back, formData);
+  const tagNames = [
+    ...new Set(
+      String(formData.get("tags") ?? "")
+        .split(",")
+        .map((t) => t.trim().toLowerCase().slice(0, 40))
+        .filter(Boolean),
+    ),
+  ].slice(0, 20);
+
+  return { typeId: type.id, title, body: parsed.doc, fields, tagNames, ...src };
+}
+
+async function saveTags(tx: Tx, userId: string, noteId: string, names: string[]) {
+  await tx.delete(noteTags).where(eq(noteTags.noteId, noteId));
+  if (names.length === 0) return;
+  await tx.insert(tags).values(names.map((name) => ({ userId, name }))).onConflictDoNothing();
+  const rows = await tx
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.userId, userId), inArray(tags.name, names)));
+  await tx.insert(noteTags).values(rows.map((r) => ({ noteId, tagId: r.id })));
+}
+
+// Associe à la note les images qu'elle contient, et libère celles qu'elle n'utilise plus.
+async function linkImages(tx: Tx, userId: string, noteId: string, body: object) {
+  const ids = imageIds(body);
+  await tx
+    .update(images)
+    .set({ noteId: null })
+    .where(and(eq(images.userId, userId), eq(images.noteId, noteId)));
+  if (ids.length === 0) return;
+  await tx
+    .update(images)
+    .set({ noteId })
+    .where(and(eq(images.userId, userId), inArray(images.id, ids)));
+}
+
+export async function createNote(formData: FormData) {
+  const user = await requireUser();
+  const topicId = formData.get("topicId");
+  if (!isUuid(topicId)) fail("/", "Notion introuvable.");
+  const back = `/notes/nouvelle?notion=${topicId}`;
+  const [topic] = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.id, topicId), eq(topics.userId, user.id), isNull(topics.deletedAt)));
+  if (!topic) fail("/", "Notion introuvable.");
+
+  const f = await readNoteForm(formData, user.id, back);
+  const id = await db.transaction(async (tx) => {
+    const [last] = await tx
+      .select({ p: max(notes.position) })
+      .from(notes)
+      .where(eq(notes.topicId, topic.id));
+    const [row] = await tx
+      .insert(notes)
+      .values({
+        userId: user.id,
+        topicId: topic.id,
+        typeId: f.typeId,
+        title: f.title,
+        body: f.body,
+        fields: f.fields,
+        position: (last?.p ?? -1) + 1,
+        sourceLabel: f.sourceLabel,
+        sourceUrl: f.sourceUrl,
+      })
+      .returning({ id: notes.id });
+    await saveTags(tx, user.id, row.id, f.tagNames);
+    await linkImages(tx, user.id, row.id, f.body);
+    return row.id;
+  });
+  redirect(`/notes/${id}`);
+}
+
+export async function updateNote(formData: FormData) {
+  const user = await requireUser();
+  const noteId = formData.get("noteId");
+  if (!isUuid(noteId)) fail("/", "Note introuvable.");
+  const back = `/notes/${noteId}/modifier`;
+  const [note] = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(and(eq(notes.id, noteId), eq(notes.userId, user.id), isNull(notes.deletedAt)));
+  if (!note) fail("/", "Note introuvable.");
+
+  const f = await readNoteForm(formData, user.id, back);
+  await db.transaction(async (tx) => {
+    await tx
+      .update(notes)
+      .set({
+        typeId: f.typeId,
+        title: f.title,
+        body: f.body,
+        fields: f.fields,
+        sourceLabel: f.sourceLabel,
+        sourceUrl: f.sourceUrl,
+      })
+      .where(and(eq(notes.id, note.id), eq(notes.userId, user.id)));
+    await saveTags(tx, user.id, note.id, f.tagNames);
+    await linkImages(tx, user.id, note.id, f.body);
+  });
+  redirect(`/notes/${note.id}`);
 }

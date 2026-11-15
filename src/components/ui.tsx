@@ -119,3 +119,23 @@ export function EmptyState({ title, text, action }: { title: string; text: strin
     </div>
   );
 }
+
+// Couleur des étiquettes de type de note.
+const TYPE_COLORS: Record<string, string> = {
+  blue: "bg-[#e6f1fb] text-[#0c447c]",
+  amber: "bg-[#faeeda] text-[#633806]",
+  gray: "bg-[#eef0f4] text-[#3a4358]",
+  violet: "bg-[#eeedfe] text-[#3c3489]",
+  green: "bg-[#e3f1ec] text-[#14574a]",
+  pink: "bg-[#fbeaf0] text-[#72243e]",
+  orange: "bg-[#fdebdc] text-[#7a3a0a]",
+  stone: "bg-[#f1efe8] text-[#444441]",
+};
+
+export function TypeBadge({ name, color }: { name: string; color: string }) {
+  return (
+    <span className={`rounded-md px-2.5 py-0.5 text-xs font-semibold ${TYPE_COLORS[color] ?? TYPE_COLORS.gray}`}>
+      {name}
+    </span>
+  );
+}

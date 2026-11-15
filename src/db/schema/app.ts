@@ -224,3 +224,19 @@ export const accessRequests = pgTable("access_requests", {
   status: text("status").notNull().default("pending"),
   createdAt: createdAt(),
 });
+
+// Images collées dans les notes. Le fichier est dans un stockage privé (pathname) ;
+// note_id est rempli à l'enregistrement de la note (vide = image pas encore utilisée).
+export const images = pgTable(
+  "images",
+  {
+    id: id(),
+    userId: owner(),
+    noteId: uuid("note_id").references(() => notes.id, { onDelete: "set null" }),
+    pathname: text("pathname").notNull(),
+    contentType: text("content_type").notNull(),
+    size: integer("size").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("images_user").on(t.userId), index("images_note").on(t.noteId)],
+);

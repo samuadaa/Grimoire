@@ -1,6 +1,6 @@
-import { and, asc, count, eq, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { chapters, courses, domains, notes, topics } from "@/db/schema";
+import { chapters, courses, domains, noteTags, noteTypes, notes, tags, topics } from "@/db/schema";
 
 // Règle d'or : chaque requête filtre sur userId, et ignore ce qui est à la corbeille.
 
@@ -105,4 +105,40 @@ export async function getCourseContent(userId: string, courseId: string) {
     })),
     loose: topicRows.filter((t) => t.chapterId === null).map(withCount),
   };
+}
+
+export async function getTypes(userId: string) {
+  return db
+    .select()
+    .from(noteTypes)
+    .where(eq(noteTypes.userId, userId))
+    .orderBy(asc(noteTypes.position), asc(noteTypes.name));
+}
+
+export async function getNote(userId: string, id: string) {
+  const [row] = await db
+    .select({ note: notes, type: noteTypes })
+    .from(notes)
+    .innerJoin(noteTypes, eq(notes.typeId, noteTypes.id))
+    .where(and(eq(notes.id, id), eq(notes.userId, userId), isNull(notes.deletedAt)));
+  return row ?? null;
+}
+
+export async function listNotes(userId: string, topicId: string) {
+  return db
+    .select({ note: notes, type: noteTypes })
+    .from(notes)
+    .innerJoin(noteTypes, eq(notes.typeId, noteTypes.id))
+    .where(and(eq(notes.userId, userId), eq(notes.topicId, topicId), isNull(notes.deletedAt)))
+    .orderBy(asc(notes.position), desc(notes.createdAt));
+}
+
+export async function getNoteTags(userId: string, noteId: string) {
+  const rows = await db
+    .select({ name: tags.name })
+    .from(noteTags)
+    .innerJoin(tags, eq(noteTags.tagId, tags.id))
+    .where(and(eq(noteTags.noteId, noteId), eq(tags.userId, userId)))
+    .orderBy(asc(tags.name));
+  return rows.map((r) => r.name);
 }
