@@ -39,6 +39,8 @@ export default function NoteForm({
   error,
   cancelHref,
   submitLabel,
+  topics,
+  currentTopicId,
 }: {
   types: FormType[];
   hidden: Record<string, string>;
@@ -47,6 +49,8 @@ export default function NoteForm({
   error?: string;
   cancelHref: string;
   submitLabel: string;
+  topics?: { id: string; label: string }[];
+  currentTopicId?: string;
 }) {
   const [typeId, setTypeId] = useState(
     initial?.typeId ?? types.find((t) => t.name === "Libre")?.id ?? types[0]?.id ?? "",
@@ -96,6 +100,21 @@ export default function NoteForm({
 
       <div className={`${cardCls} flex flex-col gap-5 p-7`}>
         <FormError message={error} />
+
+        {topics && (
+          <div>
+            <label htmlFor="topicId" className="mb-1.5 block text-sm font-semibold text-[#1a2340]">
+              Notion <span className="font-normal text-[#4d576b]">(changez-la pour déplacer la note)</span>
+            </label>
+            <select id="topicId" name="topicId" defaultValue={currentTopicId} className={inputCls}>
+              {topics.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <label htmlFor="title" className="mb-1.5 block text-sm font-semibold text-[#1a2340]">

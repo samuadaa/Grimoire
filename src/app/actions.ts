@@ -1,10 +1,13 @@
 "use server";
 
+import { del } from "@vercel/blob";
 import { and, eq, inArray, isNull, max } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { chapters, courses, domains, images, noteTags, noteTypes, notes, tags, topics } from "@/db/schema";
+import { isItemType } from "@/lib/items";
 import { requireUser } from "@/lib/session";
+import { emptyTrash, parentHref, purgeItem, restoreItem, trashItem } from "@/lib/trash";
 import { imageIds, parseBody } from "@/lib/richtext";
 import { cleanText, cleanUrl, isUuid } from "@/lib/validation";
 
@@ -251,16 +254,34 @@ export async function updateNote(formData: FormData) {
   if (!isUuid(noteId)) fail("/", "Note introuvable.");
   const back = `/notes/${noteId}/modifier`;
   const [note] = await db
-    .select({ id: notes.id })
+    .select({ id: notes.id, topicId: notes.topicId })
     .from(notes)
     .where(and(eq(notes.id, noteId), eq(notes.userId, user.id), isNull(notes.deletedAt)));
   if (!note) fail("/", "Note introuvable.");
 
+  // Déplacement vers une autre notion (facultatif).
+  const target = formData.get("topicId");
+  let moveTo: string | null = null;
+  if (isUuid(target) && target !== note.topicId) {
+    const [t] = await db
+      .select({ id: topics.id })
+      .from(topics)
+      .where(and(eq(topics.id, target), eq(topics.userId, user.id), isNull(topics.deletedAt)));
+    if (!t) fail(back, "Notion de destination introuvable.");
+    moveTo = t.id;
+  }
+
   const f = await readNoteForm(formData, user.id, back);
   await db.transaction(async (tx) => {
+    let move: { topicId: string; position: number } | object = {};
+    if (moveTo) {
+      const [last] = await tx.select({ p: max(notes.position) }).from(notes).where(eq(notes.topicId, moveTo));
+      move = { topicId: moveTo, position: (last?.p ?? -1) + 1 };
+    }
     await tx
       .update(notes)
       .set({
+        ...move,
         typeId: f.typeId,
         title: f.title,
         body: f.body,
@@ -273,4 +294,94 @@ export async function updateNote(formData: FormData) {
     await linkImages(tx, user.id, note.id, f.body);
   });
   redirect(`/notes/${note.id}`);
+}
+
+// ---------------------------------------------------- renommer, corbeille
+
+// Renomme un élément (et change la source d'un cours ou d'un chapitre, ou le chapitre d'une notion).
+export async function renameItem(formData: FormData) {
+  const user = await requireUser();
+  const type = formData.get("type");
+  const id = formData.get("id");
+  if (!isItemType(type) || type === "note" || !isUuid(id)) fail("/", "Élément introuvable.");
+  const back = `/renommer?type=${type}&id=${id}`;
+  const name = cleanText(formData.get("name"), 160);
+  if (!name) fail(back, "Le nom est obligatoire.");
+
+  if (type === "domaine") {
+    const r = await db.update(domains).set({ name }).where(and(eq(domains.id, id), eq(domains.userId, user.id), isNull(domains.deletedAt))).returning({ id: domains.id });
+    if (!r.length) fail("/", "Élément introuvable.");
+    redirect(`/domaines/${id}`);
+  }
+  if (type === "cours") {
+    const src = source(back, formData);
+    const r = await db.update(courses).set({ name, ...src }).where(and(eq(courses.id, id), eq(courses.userId, user.id), isNull(courses.deletedAt))).returning({ id: courses.id });
+    if (!r.length) fail("/", "Élément introuvable.");
+    redirect(`/cours/${id}`);
+  }
+  if (type === "chapitre") {
+    const src = source(back, formData);
+    const r = await db.update(chapters).set({ name, ...src }).where(and(eq(chapters.id, id), eq(chapters.userId, user.id), isNull(chapters.deletedAt))).returning({ courseId: chapters.courseId });
+    if (!r.length) fail("/", "Élément introuvable.");
+    redirect(`/cours/${r[0].courseId}`);
+  }
+  // notion : nom, et chapitre (du même cours) ou « sans chapitre »
+  const [topic] = await db.select({ courseId: topics.courseId }).from(topics).where(and(eq(topics.id, id), eq(topics.userId, user.id), isNull(topics.deletedAt)));
+  if (!topic) fail("/", "Élément introuvable.");
+  const chapterRaw = formData.get("chapterId");
+  let chapterId: string | null = null;
+  if (isUuid(chapterRaw)) {
+    const [ch] = await db.select({ id: chapters.id }).from(chapters).where(and(eq(chapters.id, chapterRaw), eq(chapters.userId, user.id), eq(chapters.courseId, topic.courseId), isNull(chapters.deletedAt)));
+    if (!ch) fail(back, "Chapitre introuvable dans ce cours.");
+    chapterId = ch.id;
+  }
+  await db.update(topics).set({ name, chapterId }).where(and(eq(topics.id, id), eq(topics.userId, user.id)));
+  redirect(`/notions/${id}`);
+}
+
+export async function trashAction(formData: FormData) {
+  const user = await requireUser();
+  const type = formData.get("type");
+  const id = formData.get("id");
+  if (!isItemType(type) || !isUuid(id)) fail("/", "Élément introuvable.");
+  const back = await parentHref(db, user.id, type, id);
+  const r = await trashItem(db, user.id, type, id);
+  if (!r.ok) fail(`/corbeille/mettre?type=${type}&id=${id}`, r.message);
+  redirect(back);
+}
+
+export async function restoreAction(formData: FormData) {
+  const user = await requireUser();
+  const type = formData.get("type");
+  const id = formData.get("id");
+  if (!isItemType(type) || !isUuid(id)) fail("/corbeille", "Élément introuvable.");
+  const r = await restoreItem(db, user.id, type, id);
+  if (!r.ok) fail("/corbeille", r.message);
+  redirect("/corbeille?info=" + encodeURIComponent("Élément restauré."));
+}
+
+async function deleteFiles(pathnames: string[]) {
+  if (pathnames.length === 0) return;
+  try {
+    await del(pathnames);
+  } catch {
+    /* le fichier restera dans le stockage ; il ne compte plus dans la base */
+  }
+}
+
+export async function purgeAction(formData: FormData) {
+  const user = await requireUser();
+  const type = formData.get("type");
+  const id = formData.get("id");
+  if (!isItemType(type) || !isUuid(id)) fail("/corbeille", "Élément introuvable.");
+  const r = await purgeItem(db, user.id, type, id);
+  if (!r.ok) fail("/corbeille", r.message);
+  await deleteFiles(r.pathnames);
+  redirect("/corbeille?info=" + encodeURIComponent("Élément supprimé définitivement."));
+}
+
+export async function emptyTrashAction() {
+  const user = await requireUser();
+  await deleteFiles(await emptyTrash(db, user.id));
+  redirect("/corbeille?info=" + encodeURIComponent("Corbeille vidée."));
 }

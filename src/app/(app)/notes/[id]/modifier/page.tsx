@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { updateNote } from "@/app/actions";
 import NoteForm from "@/components/NoteForm";
 import { Breadcrumb, PageTitle } from "@/components/ui";
-import { getNote, getNoteTags, getTopic, getTypes } from "@/db/queries";
+import { getNote, getNoteTags, getTopic, getTopicOptions, getTypes } from "@/db/queries";
 import { requireUser } from "@/lib/session";
 import { isUuid } from "@/lib/validation";
 
@@ -19,10 +19,11 @@ export default async function ModifierNote({
   if (!isUuid(id)) notFound();
   const row = await getNote(user.id, id);
   if (!row) notFound();
-  const [topic, types, tagNames] = await Promise.all([
+  const [topic, types, tagNames, topicOptions] = await Promise.all([
     getTopic(user.id, row.note.topicId),
     getTypes(user.id),
     getNoteTags(user.id, id),
+    getTopicOptions(user.id),
   ]);
   if (!topic) notFound();
 
@@ -38,6 +39,8 @@ export default async function ModifierNote({
       <NoteForm
         types={types.map((t) => ({ id: t.id, name: t.name, fields: t.fields }))}
         hidden={{ noteId: id }}
+        topics={topicOptions}
+        currentTopicId={row.note.topicId}
         initial={{
           typeId: row.note.typeId,
           title: row.note.title,

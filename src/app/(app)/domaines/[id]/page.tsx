@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Breadcrumb, EmptyState, PageTitle, SectionTitle, btnPrimary, cardCls, plural } from "@/components/ui";
+import { Breadcrumb, EmptyState, PageTitle, SectionTitle, btnDangerOutline, btnOutline, btnPrimary, cardCls, plural } from "@/components/ui";
 import { getDomain, getTree } from "@/db/queries";
 import { requireUser } from "@/lib/session";
 import { isUuid } from "@/lib/validation";
@@ -17,9 +17,17 @@ export default async function PageDomaine({ params }: { params: Promise<{ id: st
     <div>
       <Breadcrumb items={[{ label: "Bibliothèque", href: "/" }]} />
       <PageTitle>{domain.name}</PageTitle>
-      <Link href={`/cours/nouveau?domaine=${id}`} className={btnPrimary}>
-        Créer un cours
-      </Link>
+      <div className="flex flex-wrap gap-2.5">
+        <Link href={`/cours/nouveau?domaine=${id}`} className={btnPrimary}>
+          Créer un cours
+        </Link>
+        <Link href={`/renommer?type=domaine&id=${id}`} className={btnOutline}>
+          Renommer
+        </Link>
+        <Link href={`/corbeille/mettre?type=domaine&id=${id}`} className={btnDangerOutline}>
+          Mettre à la corbeille
+        </Link>
+      </div>
       <SectionTitle>Cours</SectionTitle>
       {courses.length === 0 ? (
         <EmptyState title="Ajoutez votre premier cours" text="Ce domaine n’a pas encore de cours." />

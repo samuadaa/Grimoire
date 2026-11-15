@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  Breadcrumb, EmptyState, PageTitle, SectionTitle, SourceLine, btnOutline, btnPrimary, cardCls, plural,
+  Breadcrumb, EmptyState, PageTitle, SectionTitle, SourceLine, btnDangerOutline, btnOutline, btnPrimary, cardCls, plural,
 } from "@/components/ui";
 import { getCourse, getCourseContent, getDomain } from "@/db/queries";
 import { requireUser } from "@/lib/session";
@@ -35,6 +35,8 @@ export default async function PageCours({ params }: { params: Promise<{ id: stri
         {!isSub && <Link href={`/cours/nouveau?parent=${id}`} className={btnOutline}>Créer un sous-cours</Link>}
         <Link href={`/chapitres/nouveau?cours=${id}`} className={btnOutline}>Créer un chapitre</Link>
         <Link href={`/notions/nouveau?cours=${id}`} className={btnPrimary}>Créer une notion</Link>
+        <Link href={`/renommer?type=cours&id=${id}`} className={btnOutline}>Renommer</Link>
+        <Link href={`/corbeille/mettre?type=cours&id=${id}`} className={btnDangerOutline}>Mettre à la corbeille</Link>
       </div>
 
       {!isSub && content.subcourses.length > 0 && (
@@ -61,9 +63,17 @@ export default async function PageCours({ params }: { params: Promise<{ id: stri
                     <div className="text-base font-semibold text-[#1a2340]">{ch.name}</div>
                     <SourceLine label={ch.sourceLabel} url={ch.sourceUrl} />
                   </div>
-                  <Link href={`/notions/nouveau?cours=${id}&chapitre=${ch.id}`} className={`${btnOutline} !px-3.5 !py-[7px]`}>
-                    Ajouter une notion
-                  </Link>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Link href={`/notions/nouveau?cours=${id}&chapitre=${ch.id}`} className={`${btnOutline} !px-3.5 !py-[7px]`}>
+                      Ajouter une notion
+                    </Link>
+                    <Link href={`/renommer?type=chapitre&id=${ch.id}`} className={`${btnOutline} !px-3.5 !py-[7px]`}>
+                      Renommer
+                    </Link>
+                    <Link href={`/corbeille/mettre?type=chapitre&id=${ch.id}`} className={`${btnDangerOutline} !px-3.5 !py-[7px]`}>
+                      Corbeille
+                    </Link>
+                  </div>
                 </div>
                 {ch.topics.length === 0 ? (
                   <p className="px-[18px] py-3.5 text-sm text-[#4d576b]">Aucune notion dans ce chapitre.</p>

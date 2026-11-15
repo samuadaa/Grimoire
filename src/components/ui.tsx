@@ -79,14 +79,14 @@ export function FormError({ message }: { message?: string }) {
   );
 }
 
-export function SourceFields() {
+export function SourceFields({ label, url }: { label?: string | null; url?: string | null } = {}) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <Field label="Source" hint="(facultative)" htmlFor="sourceLabel">
-        <input id="sourceLabel" name="sourceLabel" className={inputCls} placeholder="Plateforme, livre…" maxLength={120} />
+        <input id="sourceLabel" name="sourceLabel" defaultValue={label ?? ""} className={inputCls} placeholder="Plateforme, livre…" maxLength={120} />
       </Field>
       <Field label="Lien" hint="(facultatif)" htmlFor="sourceUrl">
-        <input id="sourceUrl" name="sourceUrl" className={inputCls} placeholder="https://" maxLength={500} />
+        <input id="sourceUrl" name="sourceUrl" defaultValue={url ?? ""} className={inputCls} placeholder="https://" maxLength={500} />
       </Field>
     </div>
   );
@@ -139,3 +139,8 @@ export function TypeBadge({ name, color }: { name: string; color: string }) {
     </span>
   );
 }
+
+export const btnDanger =
+  "inline-block rounded-lg bg-[#a32d2d] px-[18px] py-2.5 text-sm font-semibold text-white hover:bg-[#8a2525]";
+export const btnDangerOutline =
+  "inline-block rounded-lg border border-[#a32d2d] bg-white px-[18px] py-2.5 text-sm font-semibold text-[#a32d2d] hover:bg-[#fcebeb]";

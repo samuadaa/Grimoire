@@ -36,7 +36,9 @@ export default function Sidebar({ tree, email }: { tree: TreeDomain[]; email: st
             ))}
           </div>
         ))}
-        <div className="mt-7 px-2.5 py-1.5 text-[15px] text-[#4d576b]">Corbeille (bientôt)</div>
+        <NavLink href="/corbeille" className="mt-7 block rounded-lg px-2.5 py-2 text-[15px] text-[#3a4358]">
+          Corbeille
+        </NavLink>
       </nav>
       <div className="border-t border-[#dfe3ea] pt-4">
         <p className="mb-2 truncate px-1 text-[13px] text-[#4d576b]">{email}</p>

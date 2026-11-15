@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Breadcrumb, EmptyState, PageTitle, TypeBadge, btnPrimary, cardCls } from "@/components/ui";
+import { Breadcrumb, EmptyState, PageTitle, TypeBadge, btnDangerOutline, btnOutline, btnPrimary, cardCls } from "@/components/ui";
 import { getChapter, getCourse, getDomain, getTopic, listNotes } from "@/db/queries";
 import { plainText } from "@/lib/richtext";
 import { requireUser } from "@/lib/session";
@@ -34,9 +34,19 @@ export default async function PageNotion({ params }: { params: Promise<{ id: str
         ]}
       />
       <PageTitle>{topic.name}</PageTitle>
-      <Link href={create} className={btnPrimary}>
-        Créer une note
-      </Link>
+      <div className="flex flex-wrap gap-2.5">
+        <Link href={create} className={btnPrimary}>
+          Créer une note
+        </Link>
+        <Link href={`/renommer?type=notion&id=${id}`} className={btnOutline}>
+          Renommer ou déplacer
+        </Link>
+        {!topic.isDefault && (
+          <Link href={`/corbeille/mettre?type=notion&id=${id}`} className={btnDangerOutline}>
+            Mettre à la corbeille
+          </Link>
+        )}
+      </div>
 
       <div className="mt-5">
         {rows.length === 0 ? (

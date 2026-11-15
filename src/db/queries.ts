@@ -142,3 +142,23 @@ export async function getNoteTags(userId: string, noteId: string) {
     .orderBy(asc(tags.name));
   return rows.map((r) => r.name);
 }
+
+// Toutes les notions de l'utilisateur, avec leur chemin, pour déplacer une note.
+export async function getTopicOptions(userId: string) {
+  const [doms, crs, tps] = await Promise.all([
+    db.select().from(domains).where(and(eq(domains.userId, userId), isNull(domains.deletedAt))),
+    db.select().from(courses).where(and(eq(courses.userId, userId), isNull(courses.deletedAt))),
+    db.select().from(topics).where(and(eq(topics.userId, userId), isNull(topics.deletedAt))),
+  ]);
+  const D = new Map(doms.map((d) => [d.id, d]));
+  const C = new Map(crs.map((c) => [c.id, c]));
+  return tps
+    .flatMap((t) => {
+      const c = C.get(t.courseId);
+      const d = c ? D.get(c.domainId) : undefined;
+      if (!c || !d) return [];
+      const p = c.parentId ? C.get(c.parentId) : undefined;
+      return [{ id: t.id, label: [d.name, p?.name, c.name, t.name].filter(Boolean).join(" › ") }];
+    })
+    .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+}
