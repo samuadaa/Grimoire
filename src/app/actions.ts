@@ -9,6 +9,7 @@ import { isItemType } from "@/lib/items";
 import { requireUser } from "@/lib/session";
 import { emptyTrash, parentHref, purgeItem, restoreItem, trashItem } from "@/lib/trash";
 import { imageIds, parseBody } from "@/lib/richtext";
+import { type Db as PlacementDb, resolveTopic } from "@/lib/placement";
 import { buildSearchText } from "@/lib/search";
 import { cleanText, cleanUrl, isUuid } from "@/lib/validation";
 
@@ -221,26 +222,24 @@ async function linkImages(tx: Tx, userId: string, noteId: string, body: object) 
 
 export async function createNote(formData: FormData) {
   const user = await requireUser();
-  const topicId = formData.get("topicId");
-  if (!isUuid(topicId)) fail("/", "Notion introuvable.");
-  const back = `/notes/nouvelle?notion=${topicId}`;
-  const [topic] = await db
-    .select({ id: topics.id })
-    .from(topics)
-    .where(and(eq(topics.id, topicId), eq(topics.userId, user.id), isNull(topics.deletedAt)));
-  if (!topic) fail("/", "Notion introuvable.");
+  const courseId = formData.get("courseId");
+  if (!isUuid(courseId)) fail("/", "Cours introuvable.");
+  const chapterRaw = formData.get("chapterId");
+  const chapterId = isUuid(chapterRaw) ? chapterRaw : null;
+  const notionName = cleanText(formData.get("notion"), 160);
+  const back = `/notes/nouvelle?cours=${courseId}${chapterId ? `&chapitre=${chapterId}` : ""}`;
 
   const f = await readNoteForm(formData, user.id, back);
-  const id = await db.transaction(async (tx) => {
-    const [last] = await tx
-      .select({ p: max(notes.position) })
-      .from(notes)
-      .where(eq(notes.topicId, topic.id));
+  // La notion (existante ou nouvelle) et la note sont créées ensemble, ou pas du tout.
+  const result = await db.transaction(async (tx) => {
+    const topic = await resolveTopic(tx as unknown as PlacementDb, user.id, courseId, chapterId, notionName);
+    if (!topic.ok) return { ok: false as const, message: topic.message };
+    const [last] = await tx.select({ p: max(notes.position) }).from(notes).where(eq(notes.topicId, topic.topicId));
     const [row] = await tx
       .insert(notes)
       .values({
         userId: user.id,
-        topicId: topic.id,
+        topicId: topic.topicId,
         typeId: f.typeId,
         title: f.title,
         body: f.body,
@@ -253,9 +252,10 @@ export async function createNote(formData: FormData) {
       .returning({ id: notes.id });
     await saveTags(tx, user.id, row.id, f.tagNames);
     await linkImages(tx, user.id, row.id, f.body);
-    return row.id;
+    return { ok: true as const, id: row.id };
   });
-  redirect(`/notes/${id}`);
+  if (!result.ok) fail(back, result.message);
+  redirect(`/notes/${result.id}`);
 }
 
 export async function updateNote(formData: FormData) {

@@ -34,7 +34,8 @@ export default async function PageCours({ params }: { params: Promise<{ id: stri
       <div className="flex flex-wrap gap-2.5">
         {!isSub && <Link href={`/cours/nouveau?parent=${id}`} className={btnOutline}>Créer un sous-cours</Link>}
         <Link href={`/chapitres/nouveau?cours=${id}`} className={btnOutline}>Créer un chapitre</Link>
-        <Link href={`/notions/nouveau?cours=${id}`} className={btnPrimary}>Créer une notion</Link>
+        <Link href={`/notes/nouvelle?cours=${id}`} className={btnPrimary}>Créer une note</Link>
+        <Link href={`/notions/nouveau?cours=${id}`} className={btnOutline}>Créer une notion</Link>
         <Link href={`/renommer?type=cours&id=${id}`} className={btnOutline}>Renommer</Link>
         <Link href={`/corbeille/mettre?type=cours&id=${id}`} className={btnDangerOutline}>Mettre à la corbeille</Link>
       </div>
@@ -64,6 +65,9 @@ export default async function PageCours({ params }: { params: Promise<{ id: stri
                     <SourceLine label={ch.sourceLabel} url={ch.sourceUrl} />
                   </div>
                   <div className="flex flex-wrap justify-end gap-2">
+                    <Link href={`/notes/nouvelle?cours=${id}&chapitre=${ch.id}`} className={`${btnOutline} !px-3.5 !py-[7px]`}>
+                      Ajouter une note
+                    </Link>
                     <Link href={`/notions/nouveau?cours=${id}&chapitre=${ch.id}`} className={`${btnOutline} !px-3.5 !py-[7px]`}>
                       Ajouter une notion
                     </Link>
