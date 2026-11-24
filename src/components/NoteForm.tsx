@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { discardDraftAction, saveDraftAction } from "@/app/actions";
 import RichEditor from "@/components/RichEditor";
 import { FormError, btnOutline, btnPrimary, cardCls, inputCls } from "@/components/ui";
 import { foldText } from "@/lib/fold";
@@ -53,6 +54,8 @@ export default function NoteForm({
   topics,
   currentTopicId,
   placement,
+  draftKey,
+  draft,
 }: {
   types: FormType[];
   hidden: Record<string, string>;
@@ -64,6 +67,8 @@ export default function NoteForm({
   topics?: { id: string; label: string }[];
   currentTopicId?: string;
   placement?: Placement;
+  draftKey: string;
+  draft?: { data: Record<string, string>; savedAt: string };
 }) {
   const [typeId, setTypeId] = useState(
     initial?.typeId ?? types.find((t) => t.name === "Libre")?.id ?? types[0]?.id ?? "",
@@ -71,6 +76,14 @@ export default function NoteForm({
   const [body, setBody] = useState(JSON.stringify(initial?.body ?? EMPTY_DOC));
   const [chapterId, setChapterId] = useState(placement?.chapterId ?? "");
   const [notion, setNotion] = useState(placement?.notionName ?? "");
+  const [cur, setCur] = useState<NoteInitial | undefined>(initial); // contenu affiché (change si on restaure un brouillon)
+  const [rev, setRev] = useState(0);
+  const [topicSel, setTopicSel] = useState(currentTopicId ?? "");
+  const [showDraft, setShowDraft] = useState(Boolean(draft));
+  const [draftLabel, setDraftLabel] = useState("");
+  const [status, setStatus] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+  const lastSaved = useRef("");
   const inScope = (placement?.topics ?? []).filter((t) => (t.chapterId ?? "") === chapterId);
   const wanted = foldText(notion.trim());
   const notionState = !wanted
@@ -85,16 +98,116 @@ export default function NoteForm({
   const extra = type?.fields.filter((f) => f.key !== "term") ?? [];
 
   const value = (key: string) => {
-    const v = initial?.fields[key];
+    const v = cur?.fields[key];
     return Array.isArray(v) ? v.join("\n") : (v ?? "");
   };
 
+  const snapshot = () => {
+    const data: Record<string, string> = {};
+    if (formRef.current) {
+      for (const [k, v] of new FormData(formRef.current).entries()) {
+        if (typeof v === "string" && !k.startsWith("$") && k !== "draftKey" && k !== "noteId" && k !== "courseId") data[k] = v;
+      }
+    }
+    return data;
+  };
+
+  // Toutes les 5 secondes, et quand l'onglet passe en arrière-plan : le texte en cours est mis dans un brouillon à part.
+  useEffect(() => {
+    lastSaved.current = JSON.stringify(snapshot());
+    async function flush() {
+      const data = snapshot();
+      const json = JSON.stringify(data);
+      if (json === lastSaved.current) return;
+      setStatus("Enregistrement du brouillon…");
+      try {
+        const r = await saveDraftAction(draftKey, data);
+        if (r.ok) {
+          lastSaved.current = json;
+          setStatus(r.saved ? `Brouillon enregistré à ${new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "");
+        } else {
+          setStatus("Brouillon non enregistré.");
+        }
+      } catch {
+        setStatus("Brouillon non enregistré : connexion indisponible.");
+      }
+    }
+    const timer = setInterval(flush, 5000);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") void flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, [draftKey, rev]);
+
+  useEffect(() => {
+    if (draft) setDraftLabel(new Date(draft.savedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }));
+  }, [draft]);
+
+  function restoreDraft() {
+    if (!draft) return;
+    const d = draft.data;
+    let doc: object = EMPTY_DOC;
+    try {
+      doc = d.body ? JSON.parse(d.body) : EMPTY_DOC;
+    } catch {
+      /* contenu illisible : on garde un texte vide */
+    }
+    const fields: Record<string, string> = {};
+    for (const [k, v] of Object.entries(d)) if (k.startsWith("f_")) fields[k.slice(2)] = v;
+    const t = types.some((x) => x.id === d.typeId) ? d.typeId : typeId;
+    setCur({
+      typeId: t,
+      title: d.title ?? "",
+      body: doc,
+      fields,
+      tags: (d.tags ?? "").split(",").map((x) => x.trim()).filter(Boolean),
+      sourceLabel: d.sourceLabel || null,
+      sourceUrl: d.sourceUrl || null,
+    });
+    setTypeId(t);
+    setBody(JSON.stringify(doc));
+    if (placement) {
+      setChapterId(placement.chapters.some((c) => c.id === d.chapterId) ? d.chapterId : "");
+      setNotion(d.notion ?? "");
+    }
+    if (topics && topics.some((x) => x.id === d.topicId)) setTopicSel(d.topicId);
+    setRev((r) => r + 1);
+    setShowDraft(false);
+  }
+
+  async function dropDraft() {
+    setShowDraft(false);
+    try {
+      await discardDraftAction(draftKey);
+    } catch {
+      /* sans conséquence : le brouillon sera remplacé au prochain enregistrement */
+    }
+  }
+
   return (
-    <form action={action} className="max-w-[860px]">
+    <form ref={formRef} action={action} className="max-w-[860px]">
       {Object.entries(hidden).map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
       <input type="hidden" name="body" value={body} />
+      <input type="hidden" name="draftKey" value={draftKey} />
+      {draft && showDraft && (
+        <div role="region" aria-label="Brouillon retrouvé" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#e8d3a6] bg-[#faeeda] px-4 py-3 text-sm text-[#633806]">
+          <p>Un brouillon enregistré{draftLabel ? ` le ${draftLabel}` : ""} a été retrouvé.</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={restoreDraft} className="rounded-lg bg-[#1f7366] px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-[#195f54]">
+              Restaurer
+            </button>
+            <button type="button" onClick={dropDraft} className="rounded-lg border border-[#633806] bg-white px-3.5 py-1.5 text-sm font-semibold text-[#633806]">
+              Ignorer
+            </button>
+          </div>
+        </div>
+      )}
 
       <fieldset className="mb-5">
         <legend className="mb-2 text-sm font-semibold text-[#1a2340]">Type de note</legend>
@@ -122,7 +235,7 @@ export default function NoteForm({
         </div>
       </fieldset>
 
-      <div className={`${cardCls} flex flex-col gap-5 p-7`}>
+      <div key={rev} className={`${cardCls} flex flex-col gap-5 p-7`}>
         <FormError message={error} />
 
         {placement && (
@@ -188,7 +301,7 @@ export default function NoteForm({
             <label htmlFor="topicId" className="mb-1.5 block text-sm font-semibold text-[#1a2340]">
               Notion <span className="font-normal text-[#4d576b]">(changez-la pour déplacer la note)</span>
             </label>
-            <select id="topicId" name="topicId" defaultValue={currentTopicId} className={inputCls}>
+            <select id="topicId" name="topicId" value={topicSel} onChange={(e) => setTopicSel(e.target.value)} className={inputCls}>
               {topics.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
@@ -202,7 +315,7 @@ export default function NoteForm({
           <label htmlFor="title" className="mb-1.5 block text-sm font-semibold text-[#1a2340]">
             {hasTerm ? "Terme" : "Titre"} {!hasTerm && <span className="font-normal text-[#4d576b]">(facultatif)</span>}
           </label>
-          <input id="title" name="title" defaultValue={initial?.title ?? ""} maxLength={200} required={hasTerm} className={inputCls} />
+          <input id="title" name="title" defaultValue={cur?.title ?? ""} maxLength={200} required={hasTerm} className={inputCls} />
         </div>
 
         {extra.map((f) => (
@@ -230,8 +343,8 @@ export default function NoteForm({
         <div>
           <div className="mb-1.5 text-sm font-semibold text-[#1a2340]">{EDITOR_LABEL[type?.name ?? ""] ?? "Texte"}</div>
           <RichEditor
-            key={typeId === initial?.typeId ? "initial" : "free"}
-            initial={initial?.body ?? EMPTY_DOC}
+            key={rev}
+            initial={cur?.body ?? EMPTY_DOC}
             onChange={setBody}
             label={EDITOR_LABEL[type?.name ?? ""] ?? "Texte"}
           />
@@ -242,19 +355,19 @@ export default function NoteForm({
             <label htmlFor="tags" className="mb-1.5 block text-sm font-semibold text-[#1a2340]">
               Tags <span className="font-normal text-[#4d576b]">(séparés par des virgules)</span>
             </label>
-            <input id="tags" name="tags" defaultValue={initial?.tags.join(", ") ?? ""} className={inputCls} />
+            <input id="tags" name="tags" defaultValue={cur?.tags.join(", ") ?? ""} className={inputCls} />
           </div>
           <div>
             <label htmlFor="sourceLabel" className="mb-1.5 block text-sm font-semibold text-[#1a2340]">
               Source <span className="font-normal text-[#4d576b]">(facultative)</span>
             </label>
-            <input id="sourceLabel" name="sourceLabel" defaultValue={initial?.sourceLabel ?? ""} maxLength={120} className={inputCls} />
+            <input id="sourceLabel" name="sourceLabel" defaultValue={cur?.sourceLabel ?? ""} maxLength={120} className={inputCls} />
           </div>
           <div>
             <label htmlFor="sourceUrl" className="mb-1.5 block text-sm font-semibold text-[#1a2340]">
               Lien <span className="font-normal text-[#4d576b]">(facultatif)</span>
             </label>
-            <input id="sourceUrl" name="sourceUrl" defaultValue={initial?.sourceUrl ?? ""} maxLength={500} className={inputCls} />
+            <input id="sourceUrl" name="sourceUrl" defaultValue={cur?.sourceUrl ?? ""} maxLength={500} className={inputCls} />
           </div>
         </div>
       </div>
@@ -264,6 +377,9 @@ export default function NoteForm({
         <Link href={cancelHref} className={btnOutline}>
           Annuler
         </Link>
+        <p role="status" aria-live="polite" className="self-center text-sm text-[#4d576b]">
+          {status}
+        </p>
       </div>
     </form>
   );

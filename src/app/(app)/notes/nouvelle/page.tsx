@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { createNote } from "@/app/actions";
 import NoteForm from "@/components/NoteForm";
 import { Breadcrumb, PageTitle } from "@/components/ui";
+import { db } from "@/db";
 import { getChapter, getCourse, getCourseContent, getDomain, getTopic, getTypes } from "@/db/queries";
+import { getDraft } from "@/lib/drafts";
 import { requireUser } from "@/lib/session";
 import { isUuid } from "@/lib/validation";
 
@@ -48,6 +50,8 @@ export default async function NouvelleNote({
     getTypes(user.id),
   ]);
   if (!domain) notFound();
+  const draftKey = `new:${course.id}`;
+  const draft = await getDraft(db, user.id, draftKey);
 
   const topics = [
     ...content.loose.map((t) => ({ id: t.id, name: t.name, chapterId: null as string | null })),
@@ -76,6 +80,8 @@ export default async function NouvelleNote({
           notionName,
         }}
         action={createNote}
+        draftKey={draftKey}
+        draft={draft ? { data: draft.data, savedAt: draft.updatedAt.toISOString() } : undefined}
         error={erreur}
         cancelHref={cancelHref}
         submitLabel="Enregistrer la note"

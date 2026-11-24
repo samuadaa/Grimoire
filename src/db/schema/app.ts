@@ -242,3 +242,17 @@ export const images = pgTable(
   },
   (t) => [index("images_user").on(t.userId), index("images_note").on(t.noteId)],
 );
+
+// Brouillons des formulaires de note, enregistrés automatiquement (sans toucher à la note).
+// draft_key : "new:<cours>" pour une nouvelle note, "edit:<note>" pour une modification.
+export const noteDrafts = pgTable(
+  "note_drafts",
+  {
+    id: id(),
+    userId: owner(),
+    draftKey: text("draft_key").notNull(),
+    data: jsonb("data").notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("note_drafts_user_key").on(t.userId, t.draftKey)],
+);

@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { updateNote } from "@/app/actions";
 import NoteForm from "@/components/NoteForm";
 import { Breadcrumb, PageTitle } from "@/components/ui";
+import { db } from "@/db";
 import { getNote, getNoteTags, getTopic, getTopicOptions, getTypes } from "@/db/queries";
+import { deleteDraft, getDraft } from "@/lib/drafts";
 import { requireUser } from "@/lib/session";
 import { isUuid } from "@/lib/validation";
 
@@ -26,6 +28,13 @@ export default async function ModifierNote({
     getTopicOptions(user.id),
   ]);
   if (!topic) notFound();
+  // Un brouillon plus ancien que la note enregistrée n'a plus d'intérêt : on le supprime.
+  const draftKey = `edit:${id}`;
+  let draft = await getDraft(db, user.id, draftKey);
+  if (draft && draft.updatedAt.getTime() <= row.note.updatedAt.getTime()) {
+    await deleteDraft(db, user.id, draftKey);
+    draft = null;
+  }
 
   return (
     <div>
@@ -51,6 +60,8 @@ export default async function ModifierNote({
           sourceUrl: row.note.sourceUrl,
         }}
         action={updateNote}
+        draftKey={draftKey}
+        draft={draft ? { data: draft.data, savedAt: draft.updatedAt.toISOString() } : undefined}
         error={erreur}
         cancelHref={`/notes/${id}`}
         submitLabel="Enregistrer les modifications"

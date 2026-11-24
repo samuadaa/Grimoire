@@ -8,6 +8,7 @@ import { chapters, courses, domains, images, noteTags, noteTypes, notes, tags, t
 import { isItemType } from "@/lib/items";
 import { requireUser } from "@/lib/session";
 import { emptyTrash, parentHref, purgeItem, restoreItem, trashItem } from "@/lib/trash";
+import { type Db as DraftDb, deleteDraft, saveDraft } from "@/lib/drafts";
 import { imageIds, parseBody } from "@/lib/richtext";
 import { type Db as PlacementDb, resolveTopic } from "@/lib/placement";
 import { buildSearchText } from "@/lib/search";
@@ -252,6 +253,7 @@ export async function createNote(formData: FormData) {
       .returning({ id: notes.id });
     await saveTags(tx, user.id, row.id, f.tagNames);
     await linkImages(tx, user.id, row.id, f.body);
+    await deleteDraft(tx as unknown as DraftDb, user.id, formData.get("draftKey"));
     return { ok: true as const, id: row.id };
   });
   if (!result.ok) fail(back, result.message);
@@ -303,6 +305,7 @@ export async function updateNote(formData: FormData) {
       .where(and(eq(notes.id, note.id), eq(notes.userId, user.id)));
     await saveTags(tx, user.id, note.id, f.tagNames);
     await linkImages(tx, user.id, note.id, f.body);
+    await deleteDraft(tx as unknown as DraftDb, user.id, formData.get("draftKey"));
   });
   redirect(`/notes/${note.id}`);
 }
@@ -395,4 +398,17 @@ export async function emptyTrashAction() {
   const user = await requireUser();
   await deleteFiles(await emptyTrash(db, user.id));
   redirect("/corbeille?info=" + encodeURIComponent("Corbeille vidée."));
+}
+
+// ---------------------------------------------------------- brouillons
+
+// Appelée par le formulaire de note toutes les quelques secondes : enregistre le texte en cours dans un brouillon à part.
+export async function saveDraftAction(key: string, data: Record<string, string>) {
+  const user = await requireUser();
+  return saveDraft(db as unknown as DraftDb, user.id, key, data);
+}
+
+export async function discardDraftAction(key: string) {
+  const user = await requireUser();
+  await deleteDraft(db as unknown as DraftDb, user.id, key);
 }
